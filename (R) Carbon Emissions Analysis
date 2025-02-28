@@ -1,3 +1,9 @@
+Merging and displaying carbon emissions 
+This code takes carbon emmission and temperatire data from excel files.
+It then cleans the data followed by merging into 5 year averages for comparison.
+This is then followed by the creation of a ShinyApp to display the data.
+
+
 library(shiny)
 library(shinydashboard)
 library(tidyverse)
