@@ -1,0 +1,23 @@
+ShinyApp Server Creation
+This code is designed to create a shinyapp and display information from an excel sheet in certain lists
+
+server <- function(input, output) {
+  calculate_stats <- function(file_path) {
+    data <- read_excel(file_path)
+    speed <- data$Speed
+    min_val <- min(speed)
+    max_val <- max(speed)
+    median_val <- median(speed)
+    mean_val <- round(mean(speed), digits = 0)  # Round mean to whole number
+    return(list(min = min_val, max = max_val, median = median_val, mean = mean_val, speeds = speed))
+  }
+  df <- "MergedCarData.xlsx"
+  output$min <- renderPrint({ paste("Minimum Speed:", calculate_stats(df)$min) })
+  output$max <- renderPrint({ paste("Maximum Speed:", calculate_stats(df)$max) })
+  output$median <- renderPrint({ paste("Median Speed:", calculate_stats(df)$median) })
+  output$mean <- renderPrint({ paste("Mean Speed:", calculate_stats(df)$mean) })
+  output$histogram <- renderPlot({
+    speeds <- calculate_stats(df)$speeds
+    hist(speeds, main = "Distribution of Speeds", xlab = "Speed", ylab = "Frequency", col = "skyblue")
+  })
+}
