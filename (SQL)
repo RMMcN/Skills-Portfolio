@@ -1,3 +1,9 @@
+#This SQL script enforces data integrity, constraints, and relationships within a university database. It includes foreign keys, unique constraints, and checks to maintain consistency in student, 
+#faculty, and course records. It also updates GPA calculations, ensures proper data validation, and provides reporting views for GPA trends, enrollments, and faculty salaries. 
+#Additionally, stored procedures handle inserting and updating records while enforcing business rules, such as restricting advisor roles to full-time faculty. 
+#Overall, the script optimizes university data management by ensuring accuracy, consistency, and efficient reporting.
+
+
 ALTER TABLE Students$
 ADD CONSTRAINT FK_Student_FacultyAdvisor
 FOREIGN KEY ([Advisor ID]) REFERENCES NewFaculty([Faculty ID]);
