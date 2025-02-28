@@ -1,5 +1,7 @@
 ShinyApp Server Creation
 This code is designed to create a shinyapp and display information from an excel sheet in certain lists
+This displays results for minimum, maximum, median, and mean speeds of vehicles. As well as a 
+histogram showing the distribution of speeds.
 
 server <- function(input, output) {
   calculate_stats <- function(file_path) {
