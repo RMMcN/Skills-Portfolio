@@ -1,0 +1,461 @@
+ALTER TABLE Students$
+ADD CONSTRAINT FK_Student_FacultyAdvisor
+FOREIGN KEY ([Advisor ID]) REFERENCES NewFaculty([Faculty ID]);
+
+ALTER TABLE CourseOfferings$
+ADD CONSTRAINT FK_Courses_CourseOffering
+FOREIGN KEY ([Course ID]) REFERENCES NewCourses([Course ID]);
+
+ALTER TABLE Enrollment$
+ADD FOREIGN KEY ([Student ID]) REFERENCES Student$([Student ID]);
+
+ALTER TABLE Enrollment$
+ADD FOREIGN KEY ([Course Offering ID]) REFERENCES CourseOffering$([Course Offering ID]);
+
+ALTER TABLE CourseOfferings$
+ADD FOREIGN KEY ([Instructor_ID]) REFERENCES NewFaculty([Faculty ID]);
+
+ALTER TABLE Grades$
+ADD FOREIGN KEY ([Student ID]) REFERENCES Student$([Student ID]);
+
+ALTER TABLE Department$
+ADD FOREIGN KEY ([Chair ID]) REFERENCES Faculty$([Faculty ID]);
+
+ALTER TABLE NewMajor
+ADD FOREIGN KEY ([Department_ID]) REFERENCES NewDepartment([Department_ID]);
+
+ALTER TABLE Grades$
+ADD EquivalentGradePoints DECIMAL(4, 2);
+
+UPDATE Grades$
+SET EquivalentGradePoints = 
+    CASE 
+        WHEN [Letter Grade] = 'A+' THEN 4.33
+        WHEN [Letter Grade] = 'A' THEN 4.00
+        WHEN [Letter Grade] = 'A-' THEN 3.67
+        WHEN [Letter Grade] = 'B+' THEN 3.33
+        WHEN [Letter Grade] = 'B' THEN 3.00
+        WHEN [Letter Grade] = 'B-' THEN 2.67
+        WHEN [Letter Grade] = 'C+' THEN 2.33
+        WHEN [Letter Grade] = 'C' THEN 2.00
+        WHEN [Letter Grade] = 'C-' THEN 1.67
+        WHEN [Letter Grade] = 'D+' THEN 1.33
+        WHEN [Letter Grade] = 'D' THEN 1.00
+        WHEN [Letter Grade] = 'D-' THEN 0.67
+        WHEN [Letter Grade] = 'F' THEN 0.00
+        ELSE 0.00
+    END as GPA ;
+
+
+UPDATE Students$
+SET CurrentGPA = (
+    SELECT 
+        ISNULL(SUM(Grades$.EquivalentGradePoints * CourseOfferings$.[Credit Hours]) / SUM(CourseOfferings$.[Credit Hours]), 0)
+    FROM Grades$
+        JOIN CourseOfferings$ ON Grades$.[Course Offering ID] = CourseOfferings$.[Course ID]
+    WHERE Grades$.[Student ID] = Students$.[Student ID]
+      AND CourseOfferings$.[Credit Hours] > 0 AND [Letter Grade] != 'I'
+);
+
+CREATE VIEW AverageGPAByEnrollmentYear AS
+SELECT
+    [Enrollment Year],
+    AVG(CurrentGPA) AS AverageGPA
+FROM
+    Students$
+GROUP BY
+    [Enrollment Year];
+
+CREATE VIEW AvgMajorGPA as (
+
+SELECT Major, AVG(CurrentGPA) as AverageGPA
+FROM Students$ 
+GROUP BY Students$.Major
+)
+
+CREATE VIEW DepartmentEnrollment as (
+SELECT Courses$.Department, Enrollment$.Term, COUNT(Enrollment$.[Student ID]) as Students
+FROM Enrollment$, CourseOfferings$, Courses$
+WHERE Enrollment$.[Course Offering ID] = CourseOfferings$.[Course Offering ID] AND CourseOfferings$.[Course ID] = Courses$.[Course ID]
+GROUP BY Courses$.Department, Enrollment$.Term
+)
+
+CREATE VIEW StudentsInMajors as (
+SELECT Major, COUNT(Major) as StudentMajors
+FROM Students$ 
+GROUP BY Major 
+ORDER BY COUNT(Major) DESC 
+OFFSET 0 rows -- Offset needed in order to force the view to do an order by >:(
+)
+CREATE VIEW EnrollmentByState AS
+SELECT
+    e.[Term],
+    s.[Region],
+    e.[Course Offering ID],
+    COUNT(e.[Student ID]) AS Enrollment
+FROM
+    [Enrollment$] e
+JOIN
+    [Students$] s ON e.[Student ID] = s.[Student ID]
+GROUP BY
+    e.[Term],
+    s.[Region],
+    e.[Course Offering ID];
+
+CREATE VIEW FacultyFulltimeSummary as (
+SELECT Department, SUM(SALARY) as TotalSalary, AVG(SALARY) as AvgSalary, COUNT([Faculty ID]) as HeadCount
+FROM Faculty$ 
+WHERE isFullTime = 'Yes' AND Faculty$.Status = 'Active'
+GROUP BY Department
+)
+ALTER TABLE students$
+ADD CONSTRAINT unique_student_email
+UNIQUE ([Email Address]) ;
+
+ALTER TABLE grades$
+ADD CONSTRAINT valid_grades
+CHECK ([Letter Grade] IN ('A', 'B', 'C', 'D', 'F', 'I'));
+
+ALTER TABLE Students$
+ADD CONSTRAINT valid_grade_level
+CHECK ([ClassLevel] IN ('Freshman', 'Sophomore', 'Junior', 'Senior'));
+
+ALTER TABLE Students$
+ADD CONSTRAINT valid_student_status
+CHECK ([Status] IN ('Active', 'Inactive', 'Alumni'));
+
+ALTER TABLE Courses$
+ADD CONSTRAINT unique_course_name
+UNIQUE ([Course Name])
+
+ALTER TABLE Faculty$
+ADD CONSTRAINT unique_faculty_email
+UNIQUE ([Email Address]);
+
+ALTER TABLE Faculty$
+ADD CONSTRAINT valid_faculty_status
+CHECK ([Status] IN ('Active', 'Terminated', 'Emeritus'));
+
+CREATE PROCEDURE InsertStudentRecord(
+@StudentID float,
+@FirstName varchar(255),
+@MiddleName varchar(255),
+@LastName varchar(255),
+@EmailAddress varchar(255),
+@Major varchar(255),
+@Status varchar(255) NULL,
+@StatusDate datetime NULL,
+@EnrollmentYear float,
+@AdvisorID float,
+@Country varchar(255),
+@Region varchar(255),
+@City varchar(255),
+@Street varchar(255),
+@PostalCode float,
+@BirthDate datetime
+) as
+BEGIN
+	if(EXISTS(SELECT [Student ID] FROM Students$ where @StudentID = [Student ID])) return -1
+	if(NOT EXISTS(SELECT [Faculty ID] FROM Faculty$ where @AdvisorID = [Faculty ID])) return -1
+	if(EXISTS(SELECT Faculty$.IsAdvisor FROM Faculty$ WHERE @AdvisorID = [Faculty ID] AND Faculty$.IsAdvisor = 'Yes' AND Faculty$.[Termination Date] = NULL)) return -1
+	if(NOT EXISTS(SELECT Major FROM DepartmentMajors$ where @Major = Major)) return -1
+
+	set @StatusDate = ISNULL(@StatusDate, GETDATE())
+	set @Status = ISNULL(@Status, 'Active')
+
+	declare @EmailAddress varchar(255)
+	set @EmailAddress = LOWER(@FirstName) + '.' + LOWER(@LastName) + '@clare.edu'
+       
+	insert
+	INTO Students$([Student ID], [First Name], [Middle Name], [Last Name], [Email Address], [Major], [Status], [Status Date],[Enrollment Year], [Advisor ID], [Country], [Region], [City], [Street], [Postal Code], [BirthDate])
+	VALUES(@StudentID, @FirstName, @MiddleName, @LastName, @EmailAddress, @Major, @Status, @StatusDate, @EnrollmentYear, @AdvisorID, @Country, @City, @Region, @Street, @PostalCode, @BirthDate)
+END
+
+CREATE PROCEDURE UpdateStudentRecord(
+@StudentID float,
+@FirstName varchar(255),
+@MiddleName varchar(255),
+@LastName varchar(255),
+@Major varchar(255),
+@Status varchar(255) NULL,
+@StatusDate datetime NULL,
+@EnrollmentYear float,
+@AdvisorID float,
+@Country varchar(255),
+@Region varchar(255),
+@City varchar(255),
+@Street varchar(255),
+@PostalCode float,
+@BirthDate datetime
+) as
+BEGIN
+	if(NOT EXISTS(SELECT [Student ID] FROM Students$ where @StudentID = [Student ID])) return -1
+	if(NOT EXISTS(SELECT [Faculty ID] FROM Faculty$ where @AdvisorID = [Faculty ID])) return -1
+	if(EXISTS(SELECT Faculty$.IsAdvisor FROM Faculty$ WHERE @AdvisorID = [Faculty ID] AND Faculty$.IsAdvisor = 'Yes' AND Faculty$.[Termination Date] = NULL)) return -1
+	if(NOT EXISTS(SELECT Major FROM DepartmentMajors$ where @Major = Major)) return -1
+
+	set @StatusDate = ISNULL(@StatusDate, GETDATE())
+	set @Status = ISNULL(@Status, 'Active')
+
+	declare @EmailAddress varchar(255)
+	set @EmailAddress = LOWER(@FirstName) + '.' + LOWER(@LastName) + '@clare.edu'
+       
+	update Students$ set [Student ID] = @StudentID, [First Name] = @FirstName, [Middle Name] = @MiddleName, [Last Name] = @LastName, [Email Address] = @EmailAddress, [Major] = @Major, [Status] = @Status, [Status Date] = @StatusDate, [Enrollment Year] = @EnrollmentYear, [Advisor ID] = @AdvisorID, [Country] = @Country, [Region] = @Region, [City] = @City, [Street] = @Street, [Postal Code] = @PostalCode, [BirthDate] = @BirthDate
+	WHERE [Student ID] = @StudentID 
+END
+
+CREATE PROCEDURE InsertFacultyRecord(
+    @FacultyID INT,
+    @FirstName varchar(255),
+    @MiddleName varchar(255),
+    @LastName varchar(255),
+    @IsFulltime varchar(255),
+    @IsTenured varchar(255),
+    @IsAdvisor varchar(255),
+    @IsChair varchar(255),
+    @IsInstructor varchar(255),
+    @Department varchar(255)
+)AS
+BEGIN
+    SET NOCOUNT ON;
+
+    IF ((@IsAdvisor = 'Yes' OR @IsChair = 'YES' OR @IsTenured = 'YES') AND @IsFulltime <> 'YES')
+    BEGIN
+        PRINT 'Only Full-Time faculty can be a Chair, Advisor, or Tenured. Record not inserted.';
+        RETURN;
+    END
+
+	declare @email varchar(255)
+	set @email = LOWER(@FirstName) + '.' + LOWER(@LastName) + '@clare.edu'
+
+    INSERT INTO Faculty$ ([Faculty ID], [First Name], [Middle Name], [Last Name], [Email Address], [isFulltime], [istenured], [isAdvisor], [isChair], [isInstructor], [Department])
+    VALUES (@FacultyID, @FirstName, @MiddleName, @LastName, @email, @IsFulltime, @IsTenured, @IsAdvisor, @IsChair, @IsInstructor, @Department);
+
+    PRINT 'Faculty record inserted successfully.';
+END;
+
+CREATE PROCEDURE UpdateFacultyRecord(
+    @FacultyID INT,
+    @FirstName NVARCHAR(50),
+    @LastName NVARCHAR(50),
+    @IsFulltime BIT,
+    @IsTenured BIT,
+    @IsAdvisor BIT,
+    @IsChair BIT,
+    @IsInstructor BIT,
+    @Department NVARCHAR(50)
+)
+as
+BEGIN
+	if(NOT EXISTS(SELECT [Departments$].[Department Name] FROM Departments$ where @Department = [Departments$].[Department Name])) return -1
+
+	update Faculty$ set [Faculty ID] = @FacultyID, [First Name] = @FirstName, [Last Name] = @LastName, [isFullTime] = @IsFulltime, [isTenured] = @IsTenured, [IsAdvisor] = @IsAdvisor, [IsChair] = @IsChair, [IsInstructor] = @IsInstructor, [Department] = @Department
+	WHERE [Faculty ID] = @FacultyID
+END
+
+CREATE PROCEDURE InsertCourseRecord(
+@CourseNumber varchar(255),
+@CourseID float,
+@CourseLevel varchar(255),
+@CourseName varchar(255),
+@Description varchar(255) NULL,
+@Department varchar(255),
+@Status varchar(255),
+@StatusDate datetime NULL
+) as
+BEGIN
+	if(EXISTS(SELECT [Course Number] FROM Courses$ where @CourseNumber = [Course Number])) return -1
+	set @StatusDate = ISNULL(@StatusDate, GETDATE())
+        insert
+	INTO Courses$([Course Number], [Course ID], [Course Level], [Course Name], Description, Department, Status, [Status Date]) 
+	VALUES (@CourseNumber, @CourseID, @CourseLevel, @CourseName, @Description, @Department, @Status, @StatusDate)
+END
+
+CREATE PROCEDURE UpdateCourseRecord(
+@CourseNumber varchar(255),
+@CourseID float,
+@CourseLevel varchar(255),
+@CourseName varchar(255),
+@Description varchar(255) NULL,
+@Department varchar(255),
+@Status varchar(255),
+@StatusDate datetime NULL
+)
+as
+BEGIN
+	if(NOT EXISTS(SELECT [Course Number] FROM Courses$ where @CourseNumber = [Course Number])) return -1
+
+	set @StatusDate = ISNULL(@StatusDate, GETDATE())
+
+	update Courses$ set [Course Number] = @CourseNumber, [Course ID] = @CourseID, [Course Level] = @CourseLevel, [Course Name] = @CourseName, Description = @Description, Department = @Department, Status = @Status, [Status Date] = @StatusDate
+	WHERE [Course Number] = @CourseNumber
+END
+
+CREATE PROCEDURE InsertCourseOffering
+    @CourseID INT,
+    @AcademicYear INT,
+    @Term NVARCHAR(50),
+    @Section NVARCHAR(10),
+    @InstructorID INT
+AS
+BEGIN
+    SET NOCOUNT ON;
+
+    IF EXISTS (
+        SELECT 1
+        FROM CourseOfferings$
+        WHERE [Course ID] = @CourseID
+          AND [AcademicYear] = @AcademicYear
+          AND [TERM] = @Term
+          AND [SECTION] = @Section
+    )
+    BEGIN
+        PRINT 'Duplicate course offering record. Insert not performed.';
+        RETURN;
+    END
+
+    INSERT INTO CourseOfferings$([Course ID], [AcademicYear], [TERM], [SECTION], [Instructor ID])
+    VALUES (@CourseID, @AcademicYear, @Term, @Section, @InstructorID);
+
+    PRINT 'Course offering record inserted successfully.';
+END;
+
+CREATE PROCEDURE UpdateCourseOffering
+    @CourseID INT,
+    @AcademicYear INT,
+    @Term NVARCHAR(50),
+    @Section NVARCHAR(10),
+    @InstructorID INT,
+	@OfferingID INT
+AS
+BEGIN
+    SET NOCOUNT ON;
+
+    IF EXISTS (
+        SELECT 1
+        FROM CourseOfferings$
+        WHERE [Course ID] = @CourseID
+          AND AcademicYear = @AcademicYear
+          AND Term = @Term
+          AND Section = @Section
+          AND [Course Offering ID] <> @OfferingID 
+    )
+    BEGIN
+        PRINT 'Duplicate course offering record. Update not performed.';
+        RETURN;
+    END
+
+    UPDATE CourseOfferings$
+    SET
+        [AcademicYear] = @AcademicYear,
+        [TERM] = @Term,
+        [SECTION] = @Section,
+        [Instructor ID] = @InstructorID
+    WHERE
+        [Course Offering ID] = @OfferingID;
+
+    PRINT 'Course offering record updated successfully.';
+END;
+
+CREATE PROCEDURE UpdateEnrollment(
+@Term varchar(255)
+)
+as
+BEGIN
+	IF(NOT EXISTS(SELECT Term FROM Enrollment$ WHERE Term = @Term)) return -1
+	update Enrollment$ set Status = 'Complete' WHERE Term = @Term AND Status = 'Enrolled'
+END
+
+CREATE PROCEDURE UpdateGradeStatusToFinal(
+    @StudentID INT,
+    @CourseID INT
+)AS
+BEGIN
+    SET NOCOUNT ON;
+
+    IF EXISTS (SELECT 1 FROM Grades$ WHERE [Student ID] = @StudentID AND [Course Offering ID] = @CourseID AND [Letter Grade] = 'I')
+    BEGIN
+        PRINT 'Grade is incomplete. Cannot update to Final.';
+        RETURN;
+    END
+
+    UPDATE Grades$
+    SET Status = 'Final'
+    WHERE [Student ID] = @StudentID AND [Course Offering ID] = @CourseID;
+
+    PRINT 'Grade status updated to Final successfully.';
+END;
+
+-- To ensure the values don't null due to error in data
+
+ALTER TABLE CourseOfferings$ ALTER COLUMN [Course ID] float NOT NULL 
+ALTER TABLE CourseOfferings$ ALTER COLUMN [Course Offering ID] float NOT NULL 
+ALTER TABLE CourseOfferings$ ALTER COLUMN [Course Name] varchar(255) NOT NULL
+ALTER TABLE CourseOfferings$ ALTER COLUMN [Instructor ID] varchar(255) NOT NULL
+ALTER TABLE CourseOfferings$ ALTER COLUMN [TERM] varchar(7) NOT NULL
+ALTER TABLE CourseOfferings$ ALTER COLUMN [Credit Hours] float NOT NULL
+ALTER TABLE CourseOfferings$ ALTER COLUMN [AcademicYear] integer NOT NULL
+ALTER TABLE CourseOfferings$ ALTER COLUMN [Section] varchar(3) NOT NULL
+
+ALTER TABLE Students$ ALTER COLUMN [Student ID] float NOT NULL
+ALTER TABLE Students$ ALTER COLUMN [Advisor ID] float NOT NULL
+ALTER TABLE Students$ ALTER COLUMN [CurrentGPA] decimal(3,2) NOT NULL
+ALTER TABLE Students$ ALTER COLUMN [Status] varchar(255) NOT NULL
+ALTER TABLE Students$ ALTER COLUMN [Country] varchar(255) NOT NULL
+ALTER TABLE Students$ ALTER COLUMN [BirthDate] varchar(255) NOT NULL
+ALTER TABLE Students$ ALTER COLUMN [Major] varchar(255) NOT NULL 
+ALTER TABLE Students$ ALTER COLUMN [Middle Name] varchar(255) NOT NULL 
+
+ALTER TABLE Departments$ ALTER COLUMN [Chair ID] float NOT NULL
+ALTER TABLE Departments$ ALTER COLUMN [Department Name] varchar(255) NOT NULL
+
+ALTER TABLE DepartmentMajors$ ALTER COLUMN [Department ID] varchar(255) NOT NULL
+ALTER TABLE DepartmentMajors$ ALTER COLUMN [Major] varchar(255) NOT NULL
+ALTER TABLE DepartmentMajors$ ALTER COLUMN [Active] varchar(255) NOT NULL
+
+
+ALTER TABLE Courses$ ALTER COLUMN [Course ID] Int Not Null 
+ALTER TABLE Courses$ ALTER COLUMN [Course Number] VARCHAR (10) NOT NULL 
+ALTER TABLE Courses$ ALTER COLUMN [Course Name] VARCHAR (100) NOT NULL 
+ALTER TABLE Courses$ ALTER COLUMN [Department] VARCHAR (100) Not NULL
+ALTER TABLE Courses$ ALTER COLUMN [Status] VARCHAR (10) NOT NULL
+
+ALTER TABLE Faculty$ ALTER COLUMN [Faculty ID] float NOT NULL
+ALTER TABLE Faculty$ ALTER COLUMN [First Name] nvarchar(255) Not Null
+ALTER TABLE Faculty$ ALTER COLUMN [Middle Name] nvarchar(255) Not Null
+ALTER TABLE Faculty$ ALTER COLUMN [Last Name] nvarchar(255) Not Null
+ALTER TABLE Faculty$ ALTER COLUMN [IsAdvisor] nvarchar(255) Not Null
+ALTER TABLE Faculty$ ALTER COLUMN [IsChair] nvarchar(255) Not Null
+ALTER TABLE Faculty$ ALTER COLUMN [IsInstructor] nvarchar(255) Not Null
+ALTER TABLE Faculty$ ALTER COLUMN [Status] nvarchar(255) Not Null
+ALTER TABLE Faculty$ ALTER COLUMN [Hire Date] datetime Not Null
+ALTER TABLE Faculty$ ALTER COLUMN [Salary] float Not Null
+ALTER TABLE Faculty$ ALTER COLUMN [isTenured] nvarchar(255) Not Null
+ALTER TABLE Faculty$ ALTER COLUMN [isFullTime] nvarchar(255) Not Null
+ALTER TABLE Faculty$ ALTER COLUMN [Department] nvarchar(255) Not Null
+
+ALTER TABLE Enrollment$ ALTER COLUMN [EnrollmentID] float Not Null
+ALTER TABLE Enrollment$ ALTER COLUMN [Student ID] float Not Null
+ALTER TABLE Enrollment$ ALTER COLUMN [Course Offering ID] float Not Null
+ALTER TABLE Enrollment$ ALTER COLUMN [Term] nvarchar(255) Not Null
+ALTER TABLE Enrollment$ ALTER COLUMN [Status Date] datetime Not Null
+
+ALTER TABLE Grades$ ALTER COLUMN [Student ID] float NOT NULL 
+ALTER TABLE Grades$ ALTER COLUMN [Course Offering ID] float NOT NULL 
+ALTER TABLE Grades$ ALTER COLUMN [Letter Grade] varchar(2) NOT NULL 
+ALTER TABLE Grades$ ALTER COLUMN [Status] varchar(255) NOT NULL 
+ALTER TABLE Grades$ ALTER COLUMN [Status Date] datetime NOT NULL 
+
+ALTER TABLE Students$
+ADD ClassLevel varchar(36) NOT NULL default 'Freshman'
+UPDATE Students$
+Set ClassLevel = 'Sophomore'
+WHERE [Enrollment Year] = '2021'
+UPDATE Students$
+Set ClassLevel = 'Junior'
+WHERE [Enrollment Year] = '2020'
+UPDATE Students$
+Set ClassLevel = 'Senior'
+WHERE [Enrollment Year] = '2019'
+
+
