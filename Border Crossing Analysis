@@ -1,0 +1,183 @@
+# Install readxl if you haven't already
+install.packages("readxl")
+install.packages("writexl")
+install.packages("dplyr")
+install.packages("openxlsx")
+
+# Load the readxl library
+library(readxl)
+library(writexl)
+library(dplyr)
+library(openxlsx)
+
+# Read the Excel file
+data <- read.csv("C:/Users/mcnei/Documents/Mikey/Data Project.csv")
+r_data <- read.csv("C:/Users/mcnei/Documents/Mikey/Data Project.csv")
+
+# Remove specific columns by index
+data <- data[, -c(1, 2, 3, 6, 8, 9, 10)]
+
+# Convert to Date object: prepend '01-' to make it "01-Jan-2024"
+data$Date <- as.Date(paste0("01-", data$Date), format = "%d-%y-%b")
+
+# Sort by descending Date
+data <- data[order(data$Date, decreasing = TRUE), ]
+
+# Remove rows from 76200 and below
+data <- data[1:76199, ]
+
+# Assuming 'Border' column holds the values 'US-Canada Border' and 'US-Mexico Border'
+us_canada_border <- data %>% filter(Border == "US-Canada Border")
+us_mexico_border <- data %>% filter(Border == "US-Mexico Border")
+
+# Summary of the Value column
+total_can_stats <- us_canada_border %>%
+  summarise(
+    Total = sum(Value, na.rm = TRUE),  # Total sum of the 'Value' column
+    Mean = mean(Value, na.rm = TRUE),  # Mean (average) of the 'Value' column
+    Median = median(Value, na.rm = TRUE),  # Median of the 'Value' column
+    Min = min(Value, na.rm = TRUE),  # Minimum value in the 'Value' column
+    Max = max(Value, na.rm = TRUE),  # Maximum value in the 'Value' column
+    SD = sd(Value, na.rm = TRUE)  # Standard deviation of the 'Value' column
+  )
+
+total_mex_stats <- us_mexico_border %>%
+  summarise(
+    Total = sum(Value, na.rm = TRUE),  # Total sum of the 'Value' column
+    Mean = mean(Value, na.rm = TRUE),  # Mean (average) of the 'Value' column
+    Median = median(Value, na.rm = TRUE),  # Median of the 'Value' column
+    Min = min(Value, na.rm = TRUE),  # Minimum value in the 'Value' column
+    Max = max(Value, na.rm = TRUE),  # Maximum value in the 'Value' column
+    SD = sd(Value, na.rm = TRUE)  # Standard deviation of the 'Value' column
+  )
+
+#Select Specific Time Periods
+us_mexico_border_1 <- us_mexico_border[610:9804, ]
+us_mexico_border_2 <- us_mexico_border[9805:19091, ]
+us_canada_border_1 <- us_canada_border[1651:27800, ]
+us_canada_border_2 <- us_canada_border[27801:56221,]
+
+#Indv. Stats ex. Mean, SD, Min, Max
+biden_pres_mex <- us_mexico_border_1 %>%
+  summarise(
+    Total = sum(Value, na.rm = TRUE),  # Total sum of the 'Value' column
+    Mean = mean(Value, na.rm = TRUE),  # Mean (average) of the 'Value' column
+    Median = median(Value, na.rm = TRUE),  # Median of the 'Value' column
+    Min = min(Value, na.rm = TRUE),  # Minimum value in the 'Value' column
+    Max = max(Value, na.rm = TRUE),  # Maximum value in the 'Value' column
+    SD = sd(Value, na.rm = TRUE)  # Standard deviation of the 'Value' column
+  )
+
+trump_pres_mex <- us_mexico_border_2 %>%
+  summarise(
+    Total = sum(Value, na.rm = TRUE),  # Total sum of the 'Value' column
+    Mean = mean(Value, na.rm = TRUE),  # Mean (average) of the 'Value' column
+    Median = median(Value, na.rm = TRUE),  # Median of the 'Value' column
+    Min = min(Value, na.rm = TRUE),  # Minimum value in the 'Value' column
+    Max = max(Value, na.rm = TRUE),  # Maximum value in the 'Value' column
+    SD = sd(Value, na.rm = TRUE)  # Standard deviation of the 'Value' column
+  )
+
+biden_pres_can <- us_canada_border_1 %>%
+  summarise(
+    Total = sum(Value, na.rm = TRUE),  # Total sum of the 'Value' column
+    Mean = mean(Value, na.rm = TRUE),  # Mean (average) of the 'Value' column
+    Median = median(Value, na.rm = TRUE),  # Median of the 'Value' column
+    Min = min(Value, na.rm = TRUE),  # Minimum value in the 'Value' column
+    Max = max(Value, na.rm = TRUE),  # Maximum value in the 'Value' column
+    SD = sd(Value, na.rm = TRUE)  # Standard deviation of the 'Value' column
+  )
+
+trump_pres_can <- us_canada_border_2 %>%
+  summarise(
+    Total = sum(Value, na.rm = TRUE),  # Total sum of the 'Value' column
+    Mean = mean(Value, na.rm = TRUE),  # Mean (average) of the 'Value' column
+    Median = median(Value, na.rm = TRUE),  # Median of the 'Value' column
+    Min = min(Value, na.rm = TRUE),  # Minimum value in the 'Value' column
+    Max = max(Value, na.rm = TRUE),  # Maximum value in the 'Value' column
+    SD = sd(Value, na.rm = TRUE)  # Standard deviation of the 'Value' column
+  )
+
+
+#Create and add all Data to a Workbook
+total_data_wb <- createWorkbook()
+
+# Add each data frame to its own sheet
+addWorksheet(total_data_wb, "Raw Data")
+writeData(total_data_wb, "Raw Data", r_data)
+
+addWorksheet(total_data_wb, "Clean Data")
+writeData(total_data_wb, "Clean Data", data)
+
+addWorksheet(total_data_wb, "Canada Data")
+writeData(total_data_wb, "Canada Data", us_canada_border)
+
+addWorksheet(total_data_wb, "Mexico Data")
+writeData(total_data_wb, "Mexico Data", us_mexico_border)
+
+addWorksheet(total_data_wb, "Biden Canada Data")
+writeData(total_data_wb, "Biden Canada Data", us_canada_border_1)
+
+addWorksheet(total_data_wb, "Trump Canada Data")
+writeData(total_data_wb, "Trump Canada Data", us_canada_border_2)
+
+addWorksheet(total_data_wb, "Biden Mexico Data")
+writeData(total_data_wb, "Biden Mexico Data", us_mexico_border_1)
+
+addWorksheet(total_data_wb, "Trump Mexico Data")
+writeData(total_data_wb, "Trump Mexico Data", us_mexico_border_2)
+
+setColWidths(total_data_wb, sheet = "Raw Data", cols = 1:ncol(r_data), widths = "auto")
+setColWidths(total_data_wb, sheet = "Clean Data", cols = 1:ncol(data), widths = "auto")
+setColWidths(total_data_wb, sheet = "Canada Data", cols = 1:ncol(us_canada_border), widths = "auto")
+setColWidths(total_data_wb, sheet = "Mexico Data", cols = 1:ncol(us_mexico_border), widths = "auto")
+setColWidths(total_data_wb, sheet = "Biden Canada Data", cols = 1:ncol(us_canada_border_1), widths = "auto")
+setColWidths(total_data_wb, sheet = "Trump Canada Data", cols = 1:ncol(us_canada_border_2), widths = "auto")
+setColWidths(total_data_wb, sheet = "Biden Mexico Data", cols = 1:ncol(us_mexico_border_1), widths = "auto")
+setColWidths(total_data_wb, sheet = "Trump Mexico Data", cols = 1:ncol(us_mexico_border_2), widths = "auto")
+
+
+# Save workbook
+saveWorkbook(total_data_wb, "mikey_final_excel.xlsx", overwrite = TRUE)
+
+#Create the Workbook
+shell.exec("mikey_final_excel.xlsx")
+
+
+
+
+#Testing and Final Data Summaries
+# Save to a new Excel file
+#write_xlsx(us_canada_border, "sorted_by_date_1.xlsx")
+#write_xlsx(us_mexico_border, "sorted_by_date_2.xlsx")
+
+#write_xlsx(us_mexico_border_1, "2024_2020_filter_mex.xlsx")
+#write_xlsx(us_mexico_border_2, "2020_2016_filter_mex.xlsx")
+
+#write_xlsx(us_canada_border_1, "2024_2020_filter_can.xlsx")
+#write_xlsx(us_canada_border_2, "2020_2016_filter_can.xlsx")
+
+#Create Excel Files to Display Data
+#Original Data
+#shell.exec("sorted_by_date_1.xlsx")
+#shell.exec("sorted_by_date_2.xlsx")
+#Mexico Data
+#shell.exec("2024_2020_filter_mex.xlsx")
+#shell.exec("2020_2016_filter_mex.xlsx")
+#Canada Data
+#shell.exec("2024_2020_filter_can.xlsx")
+#shell.exec("2020_2016_filter_can.xlsx")
+
+
+# Print the summary
+print(total_can_stats)
+print(total_mex_stats)
+print(biden_pres_mex)
+print(trump_pres_mex)
+print(biden_pres_can)
+print(trump_pres_can)
+
+
+
+
+
